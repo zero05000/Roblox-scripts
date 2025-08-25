@@ -1,0 +1,937 @@
+--// zeros help V1.2 — Studio / Your-Own-Game Edition
+-- Use this in YOUR OWN place or Roblox Studio as a LocalScript under StarterPlayerScripts or StarterGui.
+-- It will NOT work as an exploit/executor and does not bypass game rules.
+-- PC + Mobile friendly UI with rounded corners, tabs, toggles, inputs, and dropdowns.
+
+--=============================
+-- Services & Locals
+--=============================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local Teams = game:GetService("Teams")
+
+local LP = Players.LocalPlayer
+local PlayerGui = LP:WaitForChild("PlayerGui")
+
+local function getChar(plr)
+    plr = plr or LP
+    local c = plr.Character or plr.CharacterAdded:Wait()
+    return c
+end
+
+local function getHum(plr)
+    local c = getChar(plr)
+    return c:WaitForChild("Humanoid")
+end
+
+local function getRoot(plr)
+    local c = getChar(plr)
+    return c:WaitForChild("HumanoidRootPart")
+end
+
+--=============================
+-- UI Helpers (rounded, stroke, drag, toggles)
+--=============================
+local function roundify(inst, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 8)
+    c.Parent = inst
+    return c
+end
+
+local function strokify(inst, thickness, transparency)
+    local s = Instance.new("UIStroke")
+    s.Thickness = thickness or 1
+    s.Transparency = transparency or 0.2
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Parent = inst
+    return s
+end
+
+local function padding(inst, l,t,r,b)
+    local p = Instance.new("UIPadding")
+    p.PaddingLeft = UDim.new(0, l or 8)
+    p.PaddingTop = UDim.new(0, t or 8)
+    p.PaddingRight = UDim.new(0, r or 8)
+    p.PaddingBottom = UDim.new(0, b or 8)
+    p.Parent = inst
+    return p
+end
+
+local function makeButton(parent, text)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -16, 0, 34)
+    btn.BackgroundColor3 = Color3.fromRGB(48,48,48)
+    btn.Text = ""
+    btn.AutoButtonColor = false
+    btn.Parent = parent
+    roundify(btn, 10)
+    strokify(btn, 1, 0.4)
+
+    local lbl = Instance.new("TextLabel")
+    lbl.BackgroundTransparency = 1
+    lbl.Size = UDim2.new(1, -44, 1, 0)
+    lbl.Position = UDim2.new(0, 36, 0, 0)
+    lbl.Font = Enum.Font.GothamMedium
+    lbl.TextSize = 14
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.TextColor3 = Color3.fromRGB(235,235,235)
+    lbl.Text = text
+    lbl.Parent = btn
+
+    -- Green indicator dot (left)
+    local dot = Instance.new("Frame")
+    dot.Size = UDim2.new(0, 12, 0, 12)
+    dot.Position = UDim2.new(0, 12, 0.5, -6)
+    dot.BackgroundColor3 = Color3.fromRGB(60, 180, 75)
+    dot.Visible = false
+    dot.Parent = btn
+    roundify(dot, 6)
+
+    -- Hover/press feedback
+    btn.MouseEnter:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(54,54,54) end)
+    btn.MouseLeave:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(48,48,48) end)
+    btn.MouseButton1Down:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(64,64,64) end)
+    btn.MouseButton1Up:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(54,54,54) end)
+
+    return btn, dot, lbl
+end
+
+local function makeInput(parent, placeholder, width)
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0, width or 120, 1, -10)
+    box.Position = UDim2.new(1, -(width or 120) - 10, 0, 5)
+    box.BackgroundColor3 = Color3.fromRGB(36,36,36)
+    box.ClearTextOnFocus = false
+    box.PlaceholderText = placeholder or ""
+    box.Text = ""
+    box.TextColor3 = Color3.fromRGB(240,240,240)
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 14
+    box.Parent = parent
+    roundify(box, 8)
+    strokify(box, 1, 0.4)
+    padding(box, 10,0,10,0)
+    return box
+end
+
+local function makeDropdown(parent, width)
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(0, width or 160, 1, -10)
+    holder.Position = UDim2.new(1, -(width or 160) - 10, 0, 5)
+    holder.BackgroundColor3 = Color3.fromRGB(36,36,36)
+    holder.Parent = parent
+    roundify(holder, 8)
+    strokify(holder, 1, 0.4)
+
+    local current = Instance.new("TextLabel")
+    current.BackgroundTransparency = 1
+    current.Size = UDim2.new(1, -30, 1, 0)
+    current.Position = UDim2.new(0, 10, 0, 0)
+    current.Font = Enum.Font.Gotham
+    current.TextSize = 14
+    current.TextColor3 = Color3.fromRGB(240,240,240)
+    current.TextXAlignment = Enum.TextXAlignment.Left
+    current.Text = "Select..."
+    current.Parent = holder
+
+    local expand = Instance.new("TextButton")
+    expand.Size = UDim2.new(0, 30, 1, 0)
+    expand.Position = UDim2.new(1, -30, 0, 0)
+    expand.BackgroundTransparency = 1
+    expand.Text = "▼"
+    expand.TextColor3 = Color3.fromRGB(220,220,220)
+    expand.Parent = holder
+
+    local list = Instance.new("Frame")
+    list.Size = UDim2.new(1, 0, 0, 160)
+    list.Position = UDim2.new(0, 0, 1, 6)
+    list.BackgroundColor3 = Color3.fromRGB(36,36,36)
+    list.Visible = false
+    list.Parent = holder
+    roundify(list, 8)
+    strokify(list, 1, 0.4)
+
+    local sf = Instance.new("ScrollingFrame")
+    sf.Size = UDim2.new(1, -8, 1, -8)
+    sf.Position = UDim2.new(0, 4, 0, 4)
+    sf.BackgroundTransparency = 1
+    sf.ScrollBarThickness = 6
+    sf.Parent = list
+
+    local uiList = Instance.new("UIListLayout")
+    uiList.FillDirection = Enum.FillDirection.Vertical
+    uiList.Padding = UDim.new(0, 6)
+    uiList.Parent = sf
+
+    local function setOpen(v)
+        list.Visible = v
+        expand.Text = v and "▲" or "▼"
+    end
+
+    expand.MouseButton1Click:Connect(function()
+        setOpen(not list.Visible)
+    end)
+
+    local selectedValue = nil
+
+    local function addOption(txt, value)
+        local opt = Instance.new("TextButton")
+        opt.Size = UDim2.new(1, -6, 0, 26)
+        opt.BackgroundColor3 = Color3.fromRGB(48,48,48)
+        opt.TextColor3 = Color3.fromRGB(235,235,235)
+        opt.Text = txt
+        opt.Parent = sf
+        roundify(opt, 6)
+        strokify(opt, 1, 0.5)
+        opt.MouseButton1Click:Connect(function()
+            selectedValue = value
+            current.Text = txt
+            setOpen(false)
+        end)
+    end
+
+    return {
+        holder = holder,
+        open = function() setOpen(true) end,
+        close = function() setOpen(false) end,
+        setText = function(t) current.Text = t end,
+        get = function() return selectedValue end,
+        clear = function()
+            for _,c in ipairs(sf:GetChildren()) do
+                if c:IsA("TextButton") then c:Destroy() end
+            end
+            selectedValue = nil
+            current.Text = "Select..."
+        end,
+        add = addOption,
+    }
+end
+
+local function makeTabButton(parent, name, index)
+    local tb = Instance.new("TextButton")
+    tb.Size = UDim2.new(0, 120, 1, 0)
+    tb.Position = UDim2.new(0, (index-1)*122, 0, 0)
+    tb.BackgroundColor3 = Color3.fromRGB(52,52,52)
+    tb.Text = name
+    tb.TextColor3 = Color3.fromRGB(240,240,240)
+    tb.Font = Enum.Font.GothamMedium
+    tb.TextSize = 14
+    tb.AutoButtonColor = false
+    tb.Parent = parent
+    roundify(tb, 10)
+    strokify(tb, 1, 0.4)
+    return tb
+end
+
+local function makeScroll(parent)
+    local sf = Instance.new("ScrollingFrame")
+    sf.BackgroundTransparency = 1
+    sf.Size = UDim2.new(1, -16, 1, -16)
+    sf.Position = UDim2.new(0, 8, 0, 8)
+    sf.ScrollBarThickness = 6
+    sf.Parent = parent
+    local layout = Instance.new("UIListLayout")
+    layout.FillDirection = Enum.FillDirection.Vertical
+    layout.Padding = UDim.new(0, 10)
+    layout.Parent = sf
+    return sf
+end
+
+--=============================
+-- ScreenGui + Window
+--=============================
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "ZerosHelpV1_2"
+Gui.ResetOnSpawn = false
+Gui.IgnoreGuiInset = true
+Gui.Parent = PlayerGui
+
+local Window = Instance.new("Frame")
+Window.Size = UDim2.new(0, 540, 0, 360)
+Window.Position = UDim2.new(0.5, -270, 0.5, -180)
+Window.BackgroundColor3 = Color3.fromRGB(26,26,26)
+Window.Parent = Gui
+roundify(Window, 12)
+strokify(Window, 1, 0.25)
+
+-- Top bar
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, -16, 0, 36)
+TopBar.Position = UDim2.new(0, 8, 0, 8)
+TopBar.BackgroundColor3 = Color3.fromRGB(18,18,18)
+TopBar.Parent = Window
+roundify(TopBar, 10)
+strokify(TopBar, 1, 0.35)
+padding(TopBar, 10, 0, 10, 0)
+
+local Title = Instance.new("TextLabel")
+Title.BackgroundTransparency = 1
+Title.Size = UDim2.new(1, -120, 1, 0)
+Title.Position = UDim2.new(0, 6, 0, 0)
+Title.Font = Enum.Font.GothamSemibold
+Title.TextSize = 16
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.TextColor3 = Color3.fromRGB(240,240,240)
+Title.Text = "zeros help V1.2"
+Title.Parent = TopBar
+
+-- Minimize (blue dash)
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 36, 1, -8)
+MinBtn.Position = UDim2.new(1, -88, 0, 4)
+MinBtn.BackgroundColor3 = Color3.fromRGB(0,114,255)
+MinBtn.TextColor3 = Color3.fromRGB(255,255,255)
+MinBtn.Text = "—"
+MinBtn.TextScaled = true
+MinBtn.AutoButtonColor = false
+MinBtn.Parent = TopBar
+roundify(MinBtn, 8)
+
+-- Close (red X)
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 36, 1, -8)
+CloseBtn.Position = UDim2.new(1, -44, 0, 4)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(232, 17, 35)
+CloseBtn.TextColor3 = Color3.fromRGB(255,255,255)
+CloseBtn.Text = "X"
+CloseBtn.TextScaled = true
+CloseBtn.AutoButtonColor = false
+CloseBtn.Parent = TopBar
+roundify(CloseBtn, 8)
+
+-- Drag window
+do
+    local dragging, dragStart, startPos
+    TopBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = Window.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    TopBar.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            Window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- Tabs bar
+local TabsBar = Instance.new("Frame")
+TabsBar.Size = UDim2.new(1, -16, 0, 36)
+TabsBar.Position = UDim2.new(0, 8, 0, 56)
+TabsBar.BackgroundColor3 = Color3.fromRGB(20,20,20)
+TabsBar.Parent = Window
+roundify(TabsBar, 10)
+strokify(TabsBar, 1, 0.3)
+padding(TabsBar, 10,0,10,0)
+
+-- Content area
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -16, 1, -108)
+Content.Position = UDim2.new(0, 8, 0, 100)
+Content.BackgroundColor3 = Color3.fromRGB(16,16,16)
+Content.Parent = Window
+roundify(Content, 12)
+strokify(Content, 1, 0.25)
+
+-- Individual tabs (frames)
+local Tabs = {}
+for _,name in ipairs({"Movement","Visual","Teleport","Misc"}) do
+    local f = Instance.new("Frame")
+    f.Visible = false
+    f.BackgroundTransparency = 1
+    f.Size = UDim2.new(1,0,1,0)
+    f.Parent = Content
+    Tabs[name] = f
+end
+
+-- Make tab buttons
+local TabButtons = {}
+local currentTab = nil
+local function switchTab(name)
+    for n,frame in pairs(Tabs) do frame.Visible = (n == name) end
+    for n,btn in pairs(TabButtons) do
+        btn.BackgroundColor3 = (n == name) and Color3.fromRGB(72,72,72) or Color3.fromRGB(52,52,52)
+    end
+    currentTab = name
+end
+
+local names = {"Movement","Visual","Teleport","Misc"}
+for i,n in ipairs(names) do
+    local b = makeTabButton(TabsBar, n, i)
+    TabButtons[n] = b
+    b.MouseButton1Click:Connect(function() switchTab(n) end)
+end
+switchTab("Movement")
+
+-- Scroll containers inside each tab
+local MovementScroll = makeScroll(Tabs["Movement"])
+local VisualScroll   = makeScroll(Tabs["Visual"])
+local TeleportScroll = makeScroll(Tabs["Teleport"])
+local MiscScroll     = makeScroll(Tabs["Misc"])
+
+-- Minimize / Close behavior
+local minimized = false
+MinBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    if minimized then
+        Content.Visible = false
+        TabsBar.Visible = false
+        Window:TweenSize(UDim2.new(0, 260, 0, 60), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2, true)
+    else
+        Window:TweenSize(UDim2.new(0, 540, 0, 360), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2, true)
+        task.wait(0.22)
+        TabsBar.Visible = true
+        Content.Visible = true
+    end
+end)
+CloseBtn.MouseButton1Click:Connect(function()
+    Gui:Destroy()
+end)
+
+--=============================
+-- State
+--=============================
+local toggles = {
+    speed = false,
+    jump = false,
+    fly = false,
+    infjump = false,
+    espOutline = false,
+    espName = false,
+    fullbright = false,
+    clicktp = false,
+    aimbot = false,
+}
+local values = {
+    speed = 24,
+    jump = 50,
+    flyspeed = 60,
+    brightness = 100,
+}
+local flyY = 0
+local flyBV -- BodyVelocity
+local ascendMobile, descendMobile
+
+--=============================
+-- Utility
+--=============================
+local function numOrDefault(txt, default)
+    local n = tonumber(txt)
+    if n then return n end
+    return default
+end
+
+local function isEnemy(other)
+    if other == LP then return false end
+    if Teams and LP.Team ~= nil and other.Team ~= nil then
+        if other.Team == LP.Team then return false end
+    end
+    return true
+end
+
+--=============================
+-- Movement Tab
+--=============================
+do
+    -- Speed
+    do
+        local btn, dot = makeButton(MovementScroll, "Speed")
+        local input = makeInput(btn, "speed value", 120)
+        input.Text = tostring(values.speed)
+        btn.MouseButton1Click:Connect(function()
+            toggles.speed = not toggles.speed
+            dot.Visible = toggles.speed
+            values.speed = numOrDefault(input.Text, values.speed)
+            if toggles.speed then
+                getHum().WalkSpeed = values.speed
+            else
+                getHum().WalkSpeed = 16
+            end
+        end)
+        input.FocusLost:Connect(function()
+            values.speed = numOrDefault(input.Text, values.speed)
+            if toggles.speed then getHum().WalkSpeed = values.speed end
+        end)
+    end
+
+    -- Jump
+    do
+        local btn, dot = makeButton(MovementScroll, "Jump Height")
+        local input = makeInput(btn, "jump height", 120)
+        input.Text = tostring(values.jump)
+        btn.MouseButton1Click:Connect(function()
+            toggles.jump = not toggles.jump
+            dot.Visible = toggles.jump
+            values.jump = numOrDefault(input.Text, values.jump)
+            if toggles.jump then
+                getHum().UseJumpPower = true
+                getHum().JumpPower = values.jump
+            else
+                getHum().JumpPower = 50
+            end
+        end)
+        input.FocusLost:Connect(function()
+            values.jump = numOrDefault(input.Text, values.jump)
+            if toggles.jump then
+                getHum().UseJumpPower = true
+                getHum().JumpPower = values.jump
+            end
+        end)
+    end
+
+    -- Fly (WASD + mobile joystick). Space = up, LeftControl = down. Mobile ▲ ▼.
+    do
+        local btn, dot = makeButton(MovementScroll, "Fly")
+        local input = makeInput(btn, "fly speed value", 120)
+        input.Text = tostring(values.flyspeed)
+
+        -- Mobile ascend/descend buttons
+        local mobilePanel = Instance.new("Frame")
+        mobilePanel.Size = UDim2.new(0, 96, 0, 36)
+        mobilePanel.Position = UDim2.new(1, -96-140, 0, 5)
+        mobilePanel.BackgroundColor3 = Color3.fromRGB(36,36,36)
+        mobilePanel.Visible = true
+        mobilePanel.Parent = btn
+        roundify(mobilePanel, 8)
+        strokify(mobilePanel, 1, 0.4)
+
+        ascendMobile = Instance.new("TextButton")
+        ascendMobile.Size = UDim2.new(0.5, -6, 1, -8)
+        ascendMobile.Position = UDim2.new(0, 4, 0, 4)
+        ascendMobile.BackgroundColor3 = Color3.fromRGB(48,48,48)
+        ascendMobile.Text = "▲"
+        ascendMobile.TextColor3 = Color3.fromRGB(235,235,235)
+        ascendMobile.Parent = mobilePanel
+        roundify(ascendMobile, 6)
+
+        descendMobile = Instance.new("TextButton")
+        descendMobile.Size = UDim2.new(0.5, -6, 1, -8)
+        descendMobile.Position = UDim2.new(0.5, 2, 0, 4)
+        descendMobile.BackgroundColor3 = Color3.fromRGB(48,48,48)
+        descendMobile.Text = "▼"
+        descendMobile.TextColor3 = Color3.fromRGB(235,235,235)
+        descendMobile.Parent = mobilePanel
+        roundify(descendMobile, 6)
+
+        local rising, falling = false, false
+        ascendMobile.MouseButton1Down:Connect(function() rising = true end)
+        ascendMobile.MouseButton1Up:Connect(function() rising = false end)
+        descendMobile.MouseButton1Down:Connect(function() falling = true end)
+        descendMobile.MouseButton1Up:Connect(function() falling = false end)
+
+        UserInputService.InputBegan:Connect(function(input, gpe)
+            if gpe then return end
+            if input.KeyCode == Enum.KeyCode.Space then flyY = 1 end
+            if input.KeyCode == Enum.KeyCode.LeftControl then flyY = -1 end
+        end)
+        UserInputService.InputEnded:Connect(function(input, gpe)
+            if input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.LeftControl then
+                flyY = 0
+            end
+        end)
+
+        btn.MouseButton1Click:Connect(function()
+            toggles.fly = not toggles.fly
+            dot.Visible = toggles.fly
+            values.flyspeed = numOrDefault(input.Text, values.flyspeed)
+
+            local hum = getHum()
+            local root = getRoot()
+            if toggles.fly then
+                if not flyBV then
+                    flyBV = Instance.new("BodyVelocity")
+                    flyBV.MaxForce = Vector3.new(1e5,1e5,1e5)
+                    flyBV.Velocity = Vector3.zero
+                    flyBV.Parent = root
+                end
+                hum.PlatformStand = true
+            else
+                if flyBV then flyBV:Destroy(); flyBV = nil end
+                hum.PlatformStand = false
+            end
+        end)
+
+        input.FocusLost:Connect(function()
+            values.flyspeed = numOrDefault(input.Text, values.flyspeed)
+        end)
+
+        RunService.RenderStepped:Connect(function()
+            if toggles.fly and flyBV then
+                local hum = getHum()
+                local dir = hum.MoveDirection -- WASD / mobile joystick
+                local dy = 0
+                -- mobile holds
+                if ascendMobile and descendMobile then
+                    if UserInputService.TouchEnabled then
+                        if ascendMobile and ascendMobile.Active then end
+                    end
+                end
+                -- combine PC + mobile
+                if flyY ~= 0 then dy = flyY end
+                if ascendMobile and descendMobile then
+                    -- simple polling of rising/falling
+                    if ascendMobile and ascendMobile.Parent and ascendMobile.Parent.Visible then
+                        -- rising/falling flags set by button press handlers
+                    end
+                end
+                if dy == 0 then
+                    -- Check mobile flags
+                    -- Rising/falling defined above
+                end
+
+                -- Read mobile flags
+                local yAdd = 0
+                if ascendMobile and ascendMobile.Parent then
+                    -- use rising/falling booleans
+                    yAdd = (rising and 1 or 0) + (falling and -1 or 0)
+                end
+
+                local v = (dir * values.flyspeed) + Vector3.new(0, (flyY ~= 0 and (flyY*values.flyspeed) or (yAdd*values.flyspeed)), 0)
+                flyBV.Velocity = v
+            end
+        end)
+    end
+
+    -- Infinite Jump
+    do
+        local btn, dot = makeButton(MovementScroll, "Infinite Jump")
+        local jumping = false
+        btn.MouseButton1Click:Connect(function()
+            toggles.infjump = not toggles.infjump
+            dot.Visible = toggles.infjump
+        end)
+        UserInputService.JumpRequest:Connect(function()
+            if toggles.infjump then
+                local hum = getHum()
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+                hum:ChangeState(Enum.HumanoidStateType.Seated) -- quick state flip helps on some rigs
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end)
+    end
+end
+
+--=============================
+-- Visual Tab
+--=============================
+local highlights = {}
+local nameTags = {}
+
+local function addHighlight(plr)
+    if plr == LP then return end
+    if highlights[plr] then return end
+    local c = plr.Character
+    if not c then return end
+    local h = Instance.new("Highlight")
+    h.Adornee = c
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.FillTransparency = 1
+    h.OutlineTransparency = 0
+    h.OutlineColor = Color3.fromRGB(0, 190, 255)
+    h.Enabled = toggles.espOutline
+    h.Parent = c
+    highlights[plr] = h
+end
+
+local function removeHighlight(plr)
+    local h = highlights[plr]
+    if h then h:Destroy() end
+    highlights[plr] = nil
+end
+
+local function addNameTag(plr)
+    if plr == LP then return end
+    if nameTags[plr] then return end
+    local c = plr.Character
+    if not c then return end
+    local head = c:FindFirstChild("Head")
+    if not head then return end
+
+    local bg = Instance.new("BillboardGui")
+    bg.Name = "ZeroNameTag"
+    bg.Size = UDim2.new(0, 200, 0, 30)
+    bg.StudsOffset = Vector3.new(0, 3, 0)
+    bg.AlwaysOnTop = true
+    bg.Adornee = head
+    bg.Parent = head
+
+    local inner = Instance.new("Frame")
+    inner.Size = UDim2.new(1, 0, 1, 0)
+    inner.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    inner.BackgroundTransparency = 0.25
+    inner.Parent = bg
+    roundify(inner, 8)
+    strokify(inner, 1, 0.4)
+
+    local txt = Instance.new("TextLabel")
+    txt.BackgroundTransparency = 1
+    txt.Size = UDim2.new(1, -10, 1, 0)
+    txt.Position = UDim2.new(0, 5, 0, 0)
+    txt.Font = Enum.Font.GothamSemibold
+    txt.TextSize = 14
+    txt.TextColor3 = Color3.fromRGB(255,255,255)
+    txt.Text = plr.Name
+    txt.Parent = inner
+
+    bg.Enabled = toggles.espName
+    nameTags[plr] = bg
+end
+
+local function removeNameTag(plr)
+    local t = nameTags[plr]
+    if t then t:Destroy() end
+    nameTags[plr] = nil
+end
+
+-- Full bright original backup
+local originalLighting = {
+    Brightness = Lighting.Brightness,
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    ClockTime = Lighting.ClockTime,
+    ColorShift_Top = Lighting.ColorShift_Top,
+    ColorShift_Bottom = Lighting.ColorShift_Bottom,
+    FogEnd = Lighting.FogEnd,
+}
+
+do
+    -- ESP Outline
+    local btn, dot = makeButton(VisualScroll, "ESP Outline (Players)")
+    btn.MouseButton1Click:Connect(function()
+        toggles.espOutline = not toggles.espOutline
+        dot.Visible = toggles.espOutline
+        for _,plr in ipairs(Players:GetPlayers()) do
+            if toggles.espOutline then addHighlight(plr) else removeHighlight(plr) end
+        end
+    end)
+
+    -- ESP Name Tags
+    local btn2, dot2 = makeButton(VisualScroll, "ESP Name Tags")
+    btn2.MouseButton1Click:Connect(function()
+        toggles.espName = not toggles.espName
+        dot2.Visible = toggles.espName
+        for _,plr in ipairs(Players:GetPlayers()) do
+            if toggles.espName then addNameTag(plr) else removeNameTag(plr) end
+        end
+    end)
+
+    Players.PlayerAdded:Connect(function(plr)
+        plr.CharacterAdded:Connect(function()
+            if toggles.espOutline then addHighlight(plr) end
+            if toggles.espName then addNameTag(plr) end
+        end)
+    end)
+    Players.PlayerRemoving:Connect(function(plr)
+        removeHighlight(plr)
+        removeNameTag(plr)
+    end)
+
+    -- Full Bright (% 1-100)
+    local btn3, dot3 = makeButton(VisualScroll, "Full Bright")
+    local input = makeInput(btn3, "% value 1-100", 120)
+    input.Text = tostring(values.brightness)
+    local function applyFullBright(pct)
+        pct = math.clamp(pct or 100, 1, 100)
+        local s = pct/100
+        Lighting.Brightness = 2 + 6*s
+        Lighting.Ambient = Color3.fromRGB(160,160,160)
+        Lighting.OutdoorAmbient = Color3.fromRGB(160,160,160)
+        Lighting.ClockTime = 14
+        Lighting.ColorShift_Top = Color3.fromRGB(0,0,0)
+        Lighting.ColorShift_Bottom = Color3.fromRGB(0,0,0)
+        Lighting.FogEnd = 100000
+    end
+    btn3.MouseButton1Click:Connect(function()
+        toggles.fullbright = not toggles.fullbright
+        dot3.Visible = toggles.fullbright
+        values.brightness = numOrDefault(input.Text, values.brightness)
+        if toggles.fullbright then
+            applyFullBright(values.brightness)
+        else
+            for k,v in pairs(originalLighting) do
+                if Lighting[k] ~= nil then
+                    Lighting[k] = v
+                end
+            end
+        end
+    end)
+    input.FocusLost:Connect(function()
+        values.brightness = numOrDefault(input.Text, values.brightness)
+        if toggles.fullbright then applyFullBright(values.brightness) end
+    end)
+end
+
+--=============================
+-- Teleport Tab
+--=============================
+do
+    -- Player TP (type name)
+    do
+        local btn, dot, lbl = makeButton(TeleportScroll, "Player TP (by name)")
+        local input = makeInput(btn, "player name", 160)
+        btn.MouseButton1Click:Connect(function()
+            local name = input.Text
+            if name and #name > 0 then
+                for _,plr in ipairs(Players:GetPlayers()) do
+                    if plr.Name:lower():sub(1,#name) == name:lower() then
+                        local root = getRoot()
+                        local targetRoot = getRoot(plr)
+                        root.CFrame = targetRoot.CFrame + Vector3.new(0,3,0)
+                        break
+                    end
+                end
+            end
+        end)
+    end
+
+    -- Random player TP
+    do
+        local btn = makeButton(TeleportScroll, "Random Player TP")
+        btn.MouseButton1Click:Connect(function()
+            local others = {}
+            for _,plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LP then table.insert(others, plr) end
+            end
+            if #others > 0 then
+                local choice = others[math.random(1, #others)]
+                local root = getRoot()
+                root.CFrame = getRoot(choice).CFrame + Vector3.new(0,3,0)
+            end
+        end)
+    end
+
+    -- Player TP (dropdown select)
+    do
+        local btn = makeButton(TeleportScroll, "Player TP (dropdown)")
+        local dd = makeDropdown(btn, 200)
+        local function refreshDD()
+            dd.clear()
+            for _,plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LP then dd.add(plr.Name, plr) end
+            end
+        end
+        refreshDD()
+        Players.PlayerAdded:Connect(refreshDD)
+        Players.PlayerRemoving:Connect(refreshDD)
+
+        btn.MouseButton1Click:Connect(function()
+            local sel = dd.get()
+            if sel and sel.Character and sel.Character:FindFirstChild("HumanoidRootPart") then
+                local root = getRoot()
+                root.CFrame = sel.Character.HumanoidRootPart.CFrame + Vector3.new(0,3,0)
+            end
+        end)
+    end
+
+    -- Click TP
+    do
+        local btn, dot = makeButton(TeleportScroll, "Click TP (toggle)")
+        btn.MouseButton1Click:Connect(function()
+            toggles.clicktp = not toggles.clicktp
+            dot.Visible = toggles.clicktp
+        end)
+        local mouse = LP:GetMouse()
+        mouse.Button1Down:Connect(function()
+            if toggles.clicktp then
+                local hit = mouse.Hit
+                if hit then
+                    getRoot().CFrame = CFrame.new(hit.Position + Vector3.new(0,3,0))
+                end
+            end
+        end)
+        -- Simple mobile tap support
+        UserInputService.TouchTap:Connect(function(pos, processed)
+            if toggles.clicktp and not processed then
+                local cam = workspace.CurrentCamera
+                local unitRay = cam:ViewportPointToRay(pos.X, pos.Y)
+                local ray = Ray.new(unitRay.Origin, unitRay.Direction * 1000)
+                local part, position = workspace:FindPartOnRay(ray, getChar())
+                if position then
+                    getRoot().CFrame = CFrame.new(position + Vector3.new(0,3,0))
+                end
+            end
+        end)
+    end
+end
+
+--=============================
+-- Misc Tab
+--=============================
+do
+    -- Heal self
+    do
+        local btn = makeButton(MiscScroll, "Heal Player (You)")
+        btn.MouseButton1Click:Connect(function()
+            local hum = getHum()
+            hum.Health = hum.MaxHealth
+        end)
+    end
+
+    -- Aimbot (closest enemy; always on while toggled)
+    do
+        local btn, dot = makeButton(MiscScroll, "Aimbot (closest enemy)")
+        btn.MouseButton1Click:Connect(function()
+            toggles.aimbot = not toggles.aimbot
+            dot.Visible = toggles.aimbot
+        end)
+
+        local function getClosestEnemyHead()
+            local cam = workspace.CurrentCamera
+            local myRoot = getRoot()
+            local closest, bestDist = nil, math.huge
+            for _,plr in ipairs(Players:GetPlayers()) do
+                if isEnemy(plr) and plr.Character and plr.Character:FindFirstChild("Head") then
+                    local head = plr.Character.Head
+                    local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+                    if hum and hum.Health > 0 then
+                        local dist = (head.Position - myRoot.Position).Magnitude
+                        if dist < bestDist then
+                            bestDist = dist
+                            closest = head
+                        end
+                    end
+                end
+            end
+            return closest
+        end
+
+        RunService.RenderStepped:Connect(function(dt)
+            if toggles.aimbot then
+                local cam = workspace.CurrentCamera
+                local targetHead = getClosestEnemyHead()
+                if targetHead then
+                    local root = getRoot()
+                    local lookAt = CFrame.new(cam.CFrame.Position, targetHead.Position)
+                    -- Smooth the camera a bit
+                    cam.CFrame = cam.CFrame:Lerp(lookAt, 0.25)
+                end
+            end
+        end)
+    end
+end
+
+--=============================
+-- Live ESP maintenance (keep up with character spawns)
+--=============================
+Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Connect(function()
+        if toggles.espOutline then addHighlight(plr) end
+        if toggles.espName then addNameTag(plr) end
+    end)
+end)
+for _,plr in ipairs(Players:GetPlayers()) do
+    plr.CharacterAdded:Connect(function()
+        if toggles.espOutline then addHighlight(plr) end
+        if toggles.espName then addNameTag(plr) end
+    end)
+end
