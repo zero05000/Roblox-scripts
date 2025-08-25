@@ -1,6 +1,5 @@
 --// zeros help V1.2 — Studio / Your-Own-Game Edition
 -- Use this in YOUR OWN place or Roblox Studio as a LocalScript under StarterPlayerScripts or StarterGui.
--- It will NOT work as an exploit/executor and does not bypass game rules.
 -- PC + Mobile friendly UI with rounded corners, tabs, toggles, inputs, and dropdowns.
 
 --=============================
@@ -935,3 +934,4 @@ for _,plr in ipairs(Players:GetPlayers()) do
         if toggles.espName then addNameTag(plr) end
     end)
 end
+
